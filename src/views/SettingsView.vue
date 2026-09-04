@@ -284,7 +284,7 @@ function resetApp() {
             <div class="flex gap-3">
               <span class="badge badge-warning badge-sm mt-0.5">historial</span>
               <p>
-                Cada cumplimiento resta 8 puntos y cada intento fallido resta 2.
+                Cada cumplimiento exitoso resta 8 puntos; los fallidos no cambian el porcentaje.
               </p>
             </div>
             <div class="flex gap-3">

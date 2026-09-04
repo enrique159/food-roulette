@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useRouletteStore } from '../stores/roulette'
 import { formatDate } from '../utils/currency'
@@ -8,10 +8,10 @@ const store = useRouletteStore()
 
 const monthLabel = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' }).format(new Date())
 const rangePresets = [
-  { label: 'Algo ligero', min: 10, max: 25 },
-  { label: 'Plan casual', min: 25, max: 50 },
-  { label: 'Date un gusto', min: 50, max: 100 },
-  { label: 'Plan especial', min: 100, max: 250 },
+  { label: 'Algo ligero', min: 200, max: 200 },
+  { label: 'Plan casual', min: 400, max: 400 },
+  { label: 'Date un gusto', min: 600, max: 600 },
+  { label: 'Plan especial', min: 800, max: 800 },
 ]
 
 const selectedStats = computed(() => {
@@ -19,8 +19,92 @@ const selectedStats = computed(() => {
   return store.getDesireStats(store.selectedDesire.id)
 })
 
-const chanceStyle = computed(() => ({ '--value': String(selectedStats.value?.effectiveChance ?? 0) }))
 const totalAttempts = computed(() => store.monthlyRecords.length)
+const segmentAngle = 30
+const wheelRotation = ref(0)
+const isDecelerating = ref(false)
+let animationFrame: number | null = null
+let stopTimer: number | null = null
+
+const wheelSlots = computed(() => {
+  const yesCount = Math.max(1, Math.round(((selectedStats.value?.effectiveChance ?? 33) / 100) * 12))
+  return Array.from({ length: 12 }, (_, index) => ({
+    index,
+    won: index < yesCount,
+    label: index < yesCount ? 'SÍ' : 'NO',
+  }))
+})
+
+const wheelBackground = computed(() => {
+  const slices = wheelSlots.value.map((slot) => {
+    const color = slot.won ? '#6366f1' : '#db2777'
+    return `${color} ${slot.index * segmentAngle}deg ${(slot.index + 1) * segmentAngle}deg`
+  })
+  return `conic-gradient(from -15deg, ${slices.join(', ')})`
+})
+
+const wheelStyle = computed(() => ({
+  background: wheelBackground.value,
+  transform: `rotate(${wheelRotation.value}deg)`,
+  transition: isDecelerating.value ? 'transform 1.8s cubic-bezier(0.12, 0.82, 0.23, 1)' : 'none',
+}))
+
+function wheelLabelStyle(index: number) {
+  return { transform: `translate(-50%, -50%) rotate(${index * segmentAngle}deg) translateY(-84px) rotate(${-index * segmentAngle}deg)` }
+}
+
+function startWheelSpin() {
+  if (!store.spinChance()) return
+
+  wheelRotation.value = 0
+  isDecelerating.value = false
+
+  const animate = () => {
+    if (!store.isSpinning || store.isStopping) {
+      animationFrame = null
+      return
+    }
+    wheelRotation.value += 18
+    animationFrame = window.requestAnimationFrame(animate)
+  }
+
+  animationFrame = window.requestAnimationFrame(animate)
+}
+
+function stopWheelSpin() {
+  if (!store.isSpinning || store.isStopping) return
+
+  const outcome = store.stopChance()
+  if (outcome === null) return
+
+  if (animationFrame !== null) {
+    window.cancelAnimationFrame(animationFrame)
+    animationFrame = null
+  }
+
+  const candidates = wheelSlots.value.filter((slot) => slot.won === outcome)
+  const targetSlot = candidates[Math.floor(Math.random() * candidates.length)]
+  const currentAngle = ((wheelRotation.value % 360) + 360) % 360
+  const targetOffset = ((-targetSlot.index * segmentAngle - currentAngle) + 360) % 360
+  const targetRotation = wheelRotation.value + 1440 + targetOffset
+
+  isDecelerating.value = true
+  window.requestAnimationFrame(() => {
+    wheelRotation.value = targetRotation
+  })
+
+  stopTimer = window.setTimeout(() => {
+    store.resolveChance()
+    isDecelerating.value = false
+    stopTimer = null
+  }, 1850)
+}
+
+onBeforeUnmount(() => {
+  if (animationFrame !== null) window.cancelAnimationFrame(animationFrame)
+  if (stopTimer !== null) window.clearTimeout(stopTimer)
+  if (store.isSpinning) store.finishRound()
+})
 
 function selectRange(min: number, max: number) {
   store.draftMinAmount = min
@@ -143,10 +227,25 @@ function selectRange(min: number, max: number) {
           </div>
 
           <div v-else-if="store.stage === 'chance' && store.selectedDesire" class="grid items-center gap-8 py-8 md:grid-cols-[0.8fr_1.2fr]">
-            <div class="flex justify-center">
-              <div class="radial-progress bg-base-200 text-primary shadow-inner" :style="chanceStyle" role="progressbar" aria-label="Probabilidad actual">
-                <span class="font-display text-2xl font-black">{{ selectedStats?.effectiveChance }}%</span>
+            <div class="flex flex-col items-center justify-center">
+              <div class="relative h-56 w-56 sm:h-64 sm:w-64">
+                <span class="absolute left-1/2 top-0 z-20 -translate-x-1/2 text-2xl leading-none text-warning drop-shadow-md" aria-hidden="true">▼</span>
+                <div class="absolute inset-0 rounded-full bg-base-300 p-2 shadow-xl shadow-primary/10">
+                  <div class="relative h-full w-full overflow-hidden rounded-full border-4 border-base-100" :style="wheelStyle" role="img" :aria-label="`Ruleta con ${selectedStats?.effectiveChance}% de probabilidad de cumplir`">
+                    <span
+                      v-for="slot in wheelSlots"
+                      :key="slot.index"
+                      class="absolute left-1/2 top-1/2 text-[10px] font-black tracking-wide text-white drop-shadow sm:text-xs"
+                      :style="wheelLabelStyle(slot.index)"
+                    >{{ slot.label }}</span>
+                  </div>
+                </div>
+                <div class="absolute left-1/2 top-1/2 z-10 grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-neutral bg-neutral text-center text-neutral-content shadow-lg sm:h-24 sm:w-24">
+                  <div><span class="block font-display text-xl font-black text-primary sm:text-2xl">{{ selectedStats?.effectiveChance }}%</span><span class="block text-[9px] font-bold uppercase tracking-widest text-neutral-content/50">chance</span></div>
+                </div>
               </div>
+              <div class="mt-5 flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider text-base-content/50"><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-primary"></i>Sí</span><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-secondary"></i>No</span></div>
+              <p class="mt-2 text-center text-xs font-bold text-base-content/50">{{ store.isStopping ? 'Desacelerando...' : 'Toca detener cuando quieras' }}</p>
             </div>
             <div>
               <div class="mb-5 flex items-center gap-3">
@@ -160,9 +259,12 @@ function selectRange(min: number, max: number) {
                 <div class="flex justify-between"><span class="text-base-content/55">Probabilidad base</span><strong>{{ store.selectedDesire.baseProbability }}%</strong></div>
                 <div class="mt-2 flex justify-between"><span class="text-base-content/55">Ajuste por historial</span><strong class="text-warning">-{{ (selectedStats?.historyPenalty ?? 0) + (selectedStats?.budgetPenalty ?? 0) }} pp</strong></div>
               </div>
-              <button class="btn btn-primary btn-lg w-full rounded-2xl font-black shadow-lg shadow-primary/20" :disabled="store.isSpinning" @click="store.spinChance">
-                <span v-if="store.isSpinning" class="loading loading-spinner loading-sm"></span>
-                {{ store.isSpinning ? 'Girando...' : 'Girar la ruleta' }} <span v-if="!store.isSpinning" aria-hidden="true">↗</span>
+              <button v-if="!store.isSpinning" class="btn btn-primary btn-lg w-full rounded-2xl font-black shadow-lg shadow-primary/20" @click="startWheelSpin">
+                Girar la ruleta <span aria-hidden="true">↗</span>
+              </button>
+              <button v-else class="btn btn-secondary btn-lg w-full rounded-2xl font-black shadow-lg shadow-secondary/20" :disabled="store.isStopping" @click="stopWheelSpin">
+                <span v-if="store.isStopping" class="loading loading-spinner loading-sm"></span>
+                {{ store.isStopping ? 'Desacelerando...' : 'Detener la ruleta' }} <span v-if="!store.isStopping" aria-hidden="true">■</span>
               </button>
             </div>
           </div>
@@ -177,7 +279,7 @@ function selectRange(min: number, max: number) {
               <p class="mb-3 text-xs font-bold uppercase tracking-wider text-base-content/50">Rangos rápidos</p>
               <div class="flex flex-wrap gap-2">
                 <button v-for="preset in rangePresets" :key="preset.label" class="badge badge-lg cursor-pointer border-base-300 bg-base-100 px-4 py-4 font-bold hover:border-primary hover:text-primary" @click="selectRange(preset.min, preset.max)">
-                  {{ preset.label }} <span class="ml-1 text-xs opacity-55">{{ store.formatMoney(preset.min) }}–{{ store.formatMoney(preset.max) }}</span>
+                  {{ preset.label }} <span class="ml-1 text-xs opacity-55">{{ store.formatMoney(preset.min) }}</span>
                 </button>
               </div>
             </div>
@@ -257,7 +359,7 @@ function selectRange(min: number, max: number) {
             </div>
             <ul class="space-y-3 text-sm text-base-content/65">
               <li class="flex gap-3"><span class="font-black text-primary">01</span><span>La probabilidad empieza con tu valor base.</span></li>
-              <li class="flex gap-3"><span class="font-black text-primary">02</span><span>Cada intento y cumplimiento ajustan el siguiente giro.</span></li>
+              <li class="flex gap-3"><span class="font-black text-primary">02</span><span>Cada cumplimiento exitoso ajusta el siguiente giro.</span></li>
               <li class="flex gap-3"><span class="font-black text-primary">03</span><span>Al llegar al presupuesto mensual, la ruleta se pausa.</span></li>
             </ul>
           </div>

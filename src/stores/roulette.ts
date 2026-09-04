@@ -67,9 +67,12 @@ export const useRouletteStore = defineStore('roulette', () => {
   const stage = ref<RoundStage>('desire')
   const selectedDesireId = ref<string | null>(null)
   const lastResult = ref<RoundResult | null>(null)
-  const draftMinAmount = ref(10)
-  const draftMaxAmount = ref(45)
+  const draftMinAmount = ref(100)
+  const draftMaxAmount = ref(800)
   const isSpinning = ref(false)
+  const isStopping = ref(false)
+  const activeChance = ref<number | null>(null)
+  const pendingChanceOutcome = ref<boolean | null>(null)
 
   const monthlyRecords = computed(() => records.value.filter((record) => isThisMonth(record.date)))
   const successfulThisMonth = computed(() => monthlyRecords.value.filter((record) => record.status === 'won').length)
@@ -92,7 +95,7 @@ export const useRouletteStore = defineStore('roulette', () => {
     const losses = desireRecords.filter((record) => record.status === 'lost').length
     const desire = desires.value.find((item) => item.id === desireId)
     const budgetPenalty = Math.round(budgetUsedPercent.value * 0.12)
-    const historyPenalty = wins * 8 + losses * 2
+    const historyPenalty = wins * 8
     const effectiveChance = Math.max(5, Math.min(95, Math.round((desire?.baseProbability ?? 33) - historyPenalty - budgetPenalty)))
 
     return {
@@ -125,33 +128,51 @@ export const useRouletteStore = defineStore('roulette', () => {
   }
 
   function spinChance() {
-    if (stage.value !== 'chance' || !selectedDesire.value || !canPlay.value) return
+    if (stage.value !== 'chance' || !selectedDesire.value || !canPlay.value) return false
 
+    activeChance.value = getDesireStats(selectedDesire.value.id).effectiveChance
+    pendingChanceOutcome.value = null
+    lastResult.value = null
+    isStopping.value = false
     isSpinning.value = true
+    return true
+  }
+
+  function stopChance() {
+    if (stage.value !== 'chance' || !selectedDesire.value || !isSpinning.value || isStopping.value) return null
+
+    isStopping.value = true
+    pendingChanceOutcome.value = Math.random() * 100 < (activeChance.value ?? 0)
+    return pendingChanceOutcome.value
+  }
+
+  function resolveChance() {
+    if (stage.value !== 'chance' || !selectedDesire.value || !isSpinning.value || !isStopping.value) return
+
     const desire = selectedDesire.value
-    const chance = getDesireStats(desire.id).effectiveChance
+    const chance = activeChance.value ?? getDesireStats(desire.id).effectiveChance
+    const won = pendingChanceOutcome.value ?? false
+    lastResult.value = { kind: 'chance', won, chance }
+    isSpinning.value = false
+    isStopping.value = false
+    activeChance.value = null
+    pendingChanceOutcome.value = null
 
-    window.setTimeout(() => {
-      const won = Math.random() * 100 < chance
-      lastResult.value = { kind: 'chance', won, chance }
-      isSpinning.value = false
+    if (won) {
+      stage.value = 'amount'
+      return
+    }
 
-      if (won) {
-        stage.value = 'amount'
-        return
-      }
-
-      records.value.push({
-        id: crypto.randomUUID(),
-        desireId: desire.id,
-        desireTitle: desire.title,
-        emoji: desire.emoji,
-        date: new Date().toISOString(),
-        status: 'lost',
-        chance,
-      })
-      stage.value = 'result'
-    }, 1100)
+    records.value.push({
+      id: crypto.randomUUID(),
+      desireId: desire.id,
+      desireTitle: desire.title,
+      emoji: desire.emoji,
+      date: new Date().toISOString(),
+      status: 'lost',
+      chance,
+    })
+    stage.value = 'result'
   }
 
   function spinAmount() {
@@ -190,6 +211,12 @@ export const useRouletteStore = defineStore('roulette', () => {
     stage.value = 'desire'
     selectedDesireId.value = null
     lastResult.value = null
+    draftMinAmount.value = 100
+    draftMaxAmount.value = 800
+    isSpinning.value = false
+    isStopping.value = false
+    activeChance.value = null
+    pendingChanceOutcome.value = null
   }
 
   function addDesire(title: string, emoji: string, baseProbability: number) {
@@ -236,11 +263,14 @@ export const useRouletteStore = defineStore('roulette', () => {
     draftMinAmount,
     draftMaxAmount,
     isSpinning,
+    isStopping,
     recentRecords,
     getDesireStats,
     formatMoney,
     startRound,
     spinChance,
+    stopChance,
+    resolveChance,
     spinAmount,
     finishRound,
     addDesire,
