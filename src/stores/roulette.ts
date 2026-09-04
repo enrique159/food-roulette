@@ -62,6 +62,7 @@ export const useRouletteStore = defineStore('roulette', () => {
   const desires = ref<Desire[]>(Array.isArray(saved?.desires) ? saved.desires : structuredClone(defaultDesires))
   const monthlyBudget = ref<number>(typeof saved?.monthlyBudget === 'number' ? saved.monthlyBudget : 150)
   const records = ref<PlayRecord[]>(Array.isArray(saved?.records) ? saved.records : [])
+  const userName = ref<string>(typeof saved?.userName === 'string' ? saved.userName : '')
 
   const stage = ref<RoundStage>('desire')
   const selectedDesireId = ref<string | null>(null)
@@ -110,6 +111,7 @@ export const useRouletteStore = defineStore('roulette', () => {
       desires: desires.value,
       monthlyBudget: monthlyBudget.value,
       records: records.value,
+      userName: userName.value,
     }))
   }
 
@@ -212,6 +214,7 @@ export const useRouletteStore = defineStore('roulette', () => {
     desires.value = structuredClone(defaultDesires)
     monthlyBudget.value = 150
     records.value = []
+    userName.value = ''
     finishRound()
   }
 
@@ -219,6 +222,7 @@ export const useRouletteStore = defineStore('roulette', () => {
     desires,
     monthlyBudget,
     records,
+    userName,
     monthlyRecords,
     successfulThisMonth,
     spentThisMonth,

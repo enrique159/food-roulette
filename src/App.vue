@@ -14,6 +14,11 @@ const pageTitles: Record<string, string> = {
 }
 
 const pageTitle = computed(() => pageTitles[String(route.name)] ?? 'Ruleta de deseos')
+const userInitials = computed(() => {
+  const name = store.userName.trim()
+  if (!name) return 'FR'
+  return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
+})
 
 const navigation = [
   { to: '/', name: 'home', icon: '✦', label: 'Ruleta' },
@@ -48,8 +53,8 @@ function closeDrawer() {
               {{ store.successfulThisMonth }} cumplidas este mes
             </div>
             <div class="avatar placeholder">
-              <div class="w-10 rounded-full bg-primary text-primary-content">
-                <span class="text-sm font-black">FR</span>
+              <div class="w-10 rounded-full bg-primary text-primary-content flex justify-center items-center">
+                <span class="text-sm font-black">{{ userInitials }}</span>
               </div>
             </div>
           </div>
@@ -73,7 +78,7 @@ function closeDrawer() {
             <div class="grid h-11 w-11 place-items-center rounded-2xl bg-primary text-2xl text-primary-content shadow-lg shadow-primary/20">◉</div>
             <div>
               <p class="font-display text-lg font-black tracking-tight">Food Roulette</p>
-              <p class="text-xs text-neutral-content/55">Decide sin darle vueltas</p>
+              <p class="text-xs text-neutral-content/55">Hola, {{ store.userName || 'decisor' }}</p>
             </div>
           </div>
 

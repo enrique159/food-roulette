@@ -12,7 +12,7 @@ SPA de Vue 3 + TypeScript para convertir deseos en decisiones con una ruleta de 
 
 ## Persistencia y reglas
 
-Los deseos, las probabilidades base, el presupuesto mensual y el histórico se guardan en `localStorage` bajo la clave `food-roulette-state`.
+El nombre del usuario, los deseos, las probabilidades base, el presupuesto mensual y el histórico se guardan en `localStorage` bajo la clave `food-roulette-state`.
 
 La probabilidad efectiva parte del valor base de cada deseo y se ajusta con el histórico del mes (cumplimientos: -8 puntos; intentos fallidos: -2 puntos) y con el uso del presupuesto (hasta -12 puntos). La ruleta se pausa cuando el gasto del mes alcanza el presupuesto configurado.
 

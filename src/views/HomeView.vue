@@ -94,7 +94,7 @@ function selectRange(min: number, max: number) {
       </div>
     </div>
 
-    <div id="roulette" class="grid scroll-mt-24 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
+    <div id="roulette" class="grid grid-cols-1 scroll-mt-24 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
       <section class="card border border-base-300 bg-base-100 shadow-sm">
         <div class="card-body p-5 sm:p-7">
           <div class="flex flex-wrap items-start justify-between gap-4 border-b border-base-200 pb-5">
@@ -145,7 +145,7 @@ function selectRange(min: number, max: number) {
           <div v-else-if="store.stage === 'chance' && store.selectedDesire" class="grid items-center gap-8 py-8 md:grid-cols-[0.8fr_1.2fr]">
             <div class="flex justify-center">
               <div class="radial-progress bg-base-200 text-primary shadow-inner" :style="chanceStyle" role="progressbar" aria-label="Probabilidad actual">
-                <span class="font-display text-4xl font-black">{{ selectedStats?.effectiveChance }}%</span>
+                <span class="font-display text-2xl font-black">{{ selectedStats?.effectiveChance }}%</span>
               </div>
             </div>
             <div>
